@@ -1,11 +1,11 @@
 ## learning-R/rats-by-zip/rats-by-zip.R
-# Last modified: 2023-01-30 11:44
+# Last modified: 2023-04-13 10:20
 ## A map of (some Census geography -- maybe ZCTAs?) showing MFI, with 311 rat complaint points plotted on top
 library(sf)
 library(ggplot2)
 
 data_dir <- file.path(Sys.getenv('HOME'),"DOHMH-local/rats-by-NTA_data") ##MT: Edited to match my local system
-code_dir <- file.path(Sys.getenv('HOME'),"pCloudDrive/workroom/DOHMH/learning-R/rats-by-NTA")
+code_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/older-stuff")
 
 ### load GC's Census functions; also loads data.table and censusapi libraries ###
 source(file.path(code_dir,"USCB_API_functions-MTcomments.R"))
