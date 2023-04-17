@@ -1,5 +1,5 @@
 ## rats-vs-garbage.R
-# Last modified: 2023-04-13 10:54
+# Last modified: 2023-04-17 10:54
 ## A map of DSNY garbage tonnage vs rat complaints
 library(sf)
 library(ggplot2)
@@ -15,9 +15,9 @@ code_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/older
 #
 #### First section: Set up DSNY district geography ############################
 
-NYC_NTA_file  <- "geo_export_002fcdb0-2abc-4a56-89f1-f7b0e7e8baea.shp" 
-NYC_NTA_path <- file.path(data_dir,"DSNY-Districts")
-NYC_NTA_shape <- st_read(file.path(NYC_NTA_path,NYC_NTA_file), stringsAsFactors = FALSE) ## With path set correctly, load DSNY districts as an st object
+DSNY_shape_file  <- "geo_export_002fcdb0-2abc-4a56-89f1-f7b0e7e8baea.shp" 
+DSNY_path <- file.path(data_dir,"DSNY-Districts")
+DSNY_shape <- st_read(file.path(DSNY_path,DSNY_shape_file), stringsAsFactors = FALSE) ## With path set correctly, load DSNY districts as an st object
 
 
 
@@ -30,7 +30,10 @@ invisible(gc()) ## flush memory
 write.csv(DSNY_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
 ##
 ## Then, you can probably do some kind of merge, like this:
-## MFI_by_NTA <- merge(NYC_NTA_shape, MFI_NTA_2021.dt, by.x="NTACode", by.y="NTA_10") ## merge on the NTA identifier code in both objects -- note: merge data frame INTO sf object, ie sf object has to be listed first in merge command
+## MFI_by_NTA <- merge(NYC_NTA_shape, MFI_NTA_2021.dt, by.x="NTACode", by.y="NTA_10")
+## DSNY didn't make it super easy, but you can probably match on districtco -- which I think is "district code"
+## districtco looks like it's borough code concatenated with disctrict id. So that's easy enough.
+## You also have to compress the months together.
 
 ##############################################################################
 #
@@ -45,8 +48,8 @@ write.csv(DSNY_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv
 	## Since this section ends with saved csv files, you can skip it if you have already done it and are just messing with other parts of the code
 	allyears_rats_file <- file.path(local_data_dir,"Rodent_Inspection.csv") ## This is the giant csv file as download from NYC opendata
 	ratpoints.dt <- read.csv(allyears_rats_file) ## takes a few minutes to load this giant file
-	## data.tabley way to subset only 2022 rows (%like% is supposed to match string contained in):
-	subset_ratpoints.dt <- ratpoints.dt[ratpoints.dt$INSPECTION_DATE %like% "2022", ] 
+	## data.tabley way to subset only 2020 rows (%like% is supposed to match string contained in):
+	subset_ratpoints.dt <- ratpoints.dt[ratpoints.dt$INSPECTION_DATE %like% "2020", ] 
 	rm(ratpoints.dt) ## get rid of this giant memory hog
 	invisible(gc()) ## flush memory
 	subset_ratpoints.dt <- subset_ratpoints.dt[subset_ratpoints.dt$INSPECTION_TYPE %like% "Initial", ] # keep only rows that have 'Initial' INSPECTION_TYPE
@@ -55,23 +58,22 @@ write.csv(DSNY_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv
 	ratpoints_complaints.dt <- subset_ratpoints.dt[!with(subset_ratpoints.dt,LATITUDE==0 | LONGITUDE==0), ] # keep only rows that don't have 0 in lat or long
 	rm(subset_ratpoints.dt) ## get rid of this large memory hog
 	invisible(gc()) ## flush memory
-	write.csv(ratpoints_complaints.dt, file = file.path(data_dir,"2022-Rodent_Complaints.csv"))
+	write.csv(ratpoints_complaints.dt, file = file.path(data_dir,"2020-Rodent_Complaints.csv"))
 	ratpoints_ractivity.dt <- ratpoints_complaints.dt[ratpoints_complaints.dt$RESULT %like% "Activity", ] 
-	write.csv(ratpoints_ractivity.dt, file = file.path(data_dir,"2022-Rodent_Activity.csv"))
+	write.csv(ratpoints_ractivity.dt, file = file.path(data_dir,"2020-Rodent_Activity.csv"))
 	## Should really save these two as shapefiles too.
 	rm(ratpoints_complaints.dt)
 	rm(ratpoints_ractivity.dt)
 	invisible(gc()) ## flush memory
 
 ## Read in rat data csv as spatial -- big file, takes a long time to read, even after the R prompt comes back
-rats_complaintsfile <- file.path(data_dir,"2022-Rodent_Complaints.csv")
-rats_complaintslayer <- "2022-Rodent_Complaints"
+rats_complaintsfile <- file.path(data_dir,"2020-Rodent_Complaints.csv")
+rats_complaintslayer <- "2020-Rodent_Complaints"
 ratcomplaints.sf <- sf::st_read(rats_complaintsfile, rats_complaintslayer, stringsAsFactors = F, quiet=T, options=c("X_POSSIBLE_NAMES=LONGITUDE","Y_POSSIBLE_NAMES=LATITUDE"), crs = 4979)
-rats_activityfile <- file.path(data_dir,"2022-Rodent_Activity.csv")
-rats_activitylayer <- "2022-Rodent_Activity"
+rats_activityfile <- file.path(data_dir,"2020-Rodent_Activity.csv")
+rats_activitylayer <- "2020-Rodent_Activity"
 ratactivity.sf <- sf::st_read(rats_activityfile, rats_activitylayer, stringsAsFactors = F, quiet=T, options=c("X_POSSIBLE_NAMES=LONGITUDE","Y_POSSIBLE_NAMES=LATITUDE"), crs = 4979)
 
-## Now maybe calculate rat inspections per dollar MFI?
 
 ##############################################################################
 #
