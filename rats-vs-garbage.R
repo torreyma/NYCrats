@@ -1,5 +1,5 @@
 ## rats-vs-garbage.R
-# Last modified: 2023-04-18 12:28
+# Last modified: 2023-04-18 18:35
 ## A map of DSNY garbage tonnage vs rat complaints
 library(sf)
 library(ggplot2)
@@ -22,20 +22,34 @@ DSNY_shape.sf <- st_read(file.path(DSNY_path,DSNY_shape_file), stringsAsFactors 
 
 ## You can skip this section if you already have the 2020 data extracted from the big Monthly Tonnage csv
 allyears_DSNY_file <- file.path(local_data_dir,"DSNY_Monthly_Tonnage_Data.csv")
-DSNY_Monthly_Tonnage.dt <- read.csv(allyears_DSNY_file) ## read in DSNY monthly tonnage from all years
+## read in DSNY monthly tonnage from all years (fread and fwrite are the data tabley read.csv equivalents)
+DSNY_Monthly_Tonnage.dt <- fread(allyears_DSNY_file) 
 ## data.tabley way to subset only 2022 rows (%like% is supposed to match string contained in):
 DSNY_Monthly_2020.dt <- DSNY_Monthly_Tonnage.dt[DSNY_Monthly_Tonnage.dt$MONTH %like% "2020", ] 
 rm(DSNY_Monthly_Tonnage.dt) ## Delete object we aren't using anymore
 invisible(gc()) ## flush memory
-write.csv(DSNY_Monthly_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
+fwrite(DSNY_Monthly_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
 rm(DSNY_Monthly_2020.dt) ## Delete dt we don't need anymore.
 invisible(gc()) ## flush memory
 
+
 ## Read this back in, so we can run this section without above section if necessary:
-DSNY_Monthly_2020.dt <- read.csv(file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
-## need to smush down the monthly tonnage to annual
-## DSNY didn't make it super easy, but you can probably match on districtco -- which I think is "district code"
-## districtco looks like it's borough code concatenated with disctrict id. So that's easy enough.
+DSNY_Monthly_2020.dt <- fread(file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
+## Convert BOROUGH_ID to character to match COMMUNITYDISCTRICT
+DSNY_Monthly_2020.dt[, BOROUGH_ID := as.character(BOROUGH_ID)]
+## Concatenate the two together to get DISTRICTCO (district code)
+DSNY_Monthly_2020.dt[, DISTRICTCO := paste0(BOROUGH_ID, COMMUNITYDISTRICT)]
+## Drop columns that cannot be summed:
+DSNY_Monthly_2020.dt <- DSNY_Monthly_2020.dt[, .(REFUSETONSCOLLECTED, PAPERTONSCOLLECTED, MGPTONSCOLLECTED, RESORGANICSTONS, SCHOOLORGANICTONS, LEAVESORGANICTONS, XMASTREETONS, DISTRICTCO)]
+## Data tabley way of summing other columns:
+DSNY_Annual_2020.dt <- DSNY_Monthly_2020.dt[, lapply(.SD, sum, na.rm=TRUE), by = DISTRICTCO]
+	## aggregatey way -- not working:
+	## DSNY_annual_maybe <- stats::aggregate(. ~ BOROUGH, data=DSNY_Monthly_2020.dt, FUN=sum) 
+	## plyry way -- working:
+	## library(plyr) 
+	## DSNY_annual_maybe <- ddply(DSNY_Monthly_2020.dt, "BOROUGH", numcolwise(sum, na.rm = TRUE))
+## Still need to figure out what the NA7 district is
+## Also compare the ddply and data table to see if you are getting the same results
 ## Then, you can probably do some kind of merge, like this:
 ## MFI_by_NTA <- merge(NYC_NTA_shape, MFI_NTA_2021.dt, by.x="NTACode", by.y="NTA_10")
 
