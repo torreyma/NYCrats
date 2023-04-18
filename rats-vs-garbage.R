@@ -1,5 +1,5 @@
 ## rats-vs-garbage.R
-# Last modified: 2023-04-17 10:54
+# Last modified: 2023-04-18 12:28
 ## A map of DSNY garbage tonnage vs rat complaints
 library(sf)
 library(ggplot2)
@@ -17,23 +17,27 @@ code_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/older
 
 DSNY_shape_file  <- "geo_export_002fcdb0-2abc-4a56-89f1-f7b0e7e8baea.shp" 
 DSNY_path <- file.path(data_dir,"DSNY-Districts")
-DSNY_shape <- st_read(file.path(DSNY_path,DSNY_shape_file), stringsAsFactors = FALSE) ## With path set correctly, load DSNY districts as an st object
+DSNY_shape.sf <- st_read(file.path(DSNY_path,DSNY_shape_file), stringsAsFactors = FALSE) ## With path set correctly, load DSNY districts as an st object
 
 
-
+## You can skip this section if you already have the 2020 data extracted from the big Monthly Tonnage csv
 allyears_DSNY_file <- file.path(local_data_dir,"DSNY_Monthly_Tonnage_Data.csv")
 DSNY_Monthly_Tonnage.dt <- read.csv(allyears_DSNY_file) ## read in DSNY monthly tonnage from all years
 ## data.tabley way to subset only 2022 rows (%like% is supposed to match string contained in):
-DSNY_2020.dt <- DSNY_Monthly_Tonnage.dt[DSNY_Monthly_Tonnage.dt$MONTH %like% "2020", ] 
+DSNY_Monthly_2020.dt <- DSNY_Monthly_Tonnage.dt[DSNY_Monthly_Tonnage.dt$MONTH %like% "2020", ] 
 rm(DSNY_Monthly_Tonnage.dt) ## Delete object we aren't using anymore
 invisible(gc()) ## flush memory
-write.csv(DSNY_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
-##
-## Then, you can probably do some kind of merge, like this:
-## MFI_by_NTA <- merge(NYC_NTA_shape, MFI_NTA_2021.dt, by.x="NTACode", by.y="NTA_10")
+write.csv(DSNY_Monthly_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
+rm(DSNY_Monthly_2020.dt) ## Delete dt we don't need anymore.
+invisible(gc()) ## flush memory
+
+## Read this back in, so we can run this section without above section if necessary:
+DSNY_Monthly_2020.dt <- read.csv(file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
+## need to smush down the monthly tonnage to annual
 ## DSNY didn't make it super easy, but you can probably match on districtco -- which I think is "district code"
 ## districtco looks like it's borough code concatenated with disctrict id. So that's easy enough.
-## You also have to compress the months together.
+## Then, you can probably do some kind of merge, like this:
+## MFI_by_NTA <- merge(NYC_NTA_shape, MFI_NTA_2021.dt, by.x="NTACode", by.y="NTA_10")
 
 ##############################################################################
 #
@@ -45,26 +49,27 @@ write.csv(DSNY_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv
 
 
 #### section to create a smaller 2020 rats data file:
-	## Since this section ends with saved csv files, you can skip it if you have already done it and are just messing with other parts of the code
-	allyears_rats_file <- file.path(local_data_dir,"Rodent_Inspection.csv") ## This is the giant csv file as download from NYC opendata
-	ratpoints.dt <- read.csv(allyears_rats_file) ## takes a few minutes to load this giant file
-	## data.tabley way to subset only 2020 rows (%like% is supposed to match string contained in):
-	subset_ratpoints.dt <- ratpoints.dt[ratpoints.dt$INSPECTION_DATE %like% "2020", ] 
-	rm(ratpoints.dt) ## get rid of this giant memory hog
-	invisible(gc()) ## flush memory
-	subset_ratpoints.dt <- subset_ratpoints.dt[subset_ratpoints.dt$INSPECTION_TYPE %like% "Initial", ] # keep only rows that have 'Initial' INSPECTION_TYPE
-	## HERE: you might want to pull out only rows that have 'rat activity' in RESULT -- or make that another data set for mapping -- so you can show complaints vs actual rats (maybe some neighborhoods are just complainers)
-	subset_ratpoints.dt <- subset_ratpoints.dt[!with(subset_ratpoints.dt,is.na(LATITUDE)| is.na(LONGITUDE)), ] # keep only rows that don't have NA in lat or long
-	ratpoints_complaints.dt <- subset_ratpoints.dt[!with(subset_ratpoints.dt,LATITUDE==0 | LONGITUDE==0), ] # keep only rows that don't have 0 in lat or long
-	rm(subset_ratpoints.dt) ## get rid of this large memory hog
-	invisible(gc()) ## flush memory
-	write.csv(ratpoints_complaints.dt, file = file.path(data_dir,"2020-Rodent_Complaints.csv"))
-	ratpoints_ractivity.dt <- ratpoints_complaints.dt[ratpoints_complaints.dt$RESULT %like% "Activity", ] 
-	write.csv(ratpoints_ractivity.dt, file = file.path(data_dir,"2020-Rodent_Activity.csv"))
-	## Should really save these two as shapefiles too.
-	rm(ratpoints_complaints.dt)
-	rm(ratpoints_ractivity.dt)
-	invisible(gc()) ## flush memory
+## Since this section ends with saved csv files, you can skip it if you have already done it and are just messing with other parts of the code
+allyears_rats_file <- file.path(local_data_dir,"Rodent_Inspection.csv") ## This is the giant csv file as download from NYC opendata
+ratpoints.dt <- read.csv(allyears_rats_file) ## takes a few minutes to load this giant file
+## data.tabley way to subset only 2020 rows (%like% is supposed to match string contained in):
+subset_ratpoints.dt <- ratpoints.dt[ratpoints.dt$INSPECTION_DATE %like% "2020", ] 
+rm(ratpoints.dt) ## get rid of this giant memory hog
+invisible(gc()) ## flush memory
+subset_ratpoints.dt <- subset_ratpoints.dt[subset_ratpoints.dt$INSPECTION_TYPE %like% "Initial", ] # keep only rows that have 'Initial' INSPECTION_TYPE
+## HERE: you might want to pull out only rows that have 'rat activity' in RESULT -- or make that another data set for mapping -- so you can show complaints vs actual rats (maybe some neighborhoods are just complainers)
+subset_ratpoints.dt <- subset_ratpoints.dt[!with(subset_ratpoints.dt,is.na(LATITUDE)| is.na(LONGITUDE)), ] # keep only rows that don't have NA in lat or long
+ratpoints_complaints.dt <- subset_ratpoints.dt[!with(subset_ratpoints.dt,LATITUDE==0 | LONGITUDE==0), ] # keep only rows that don't have 0 in lat or long
+rm(subset_ratpoints.dt) ## get rid of this large memory hog
+invisible(gc()) ## flush memory
+write.csv(ratpoints_complaints.dt, file = file.path(data_dir,"2020-Rodent_Complaints.csv"))
+ratpoints_ractivity.dt <- ratpoints_complaints.dt[ratpoints_complaints.dt$RESULT %like% "Activity", ] 
+write.csv(ratpoints_ractivity.dt, file = file.path(data_dir,"2020-Rodent_Activity.csv"))
+## Should really save these two as shapefiles too.
+rm(ratpoints_complaints.dt)
+rm(ratpoints_ractivity.dt)
+invisible(gc()) ## flush memory
+
 
 ## Read in rat data csv as spatial -- big file, takes a long time to read, even after the R prompt comes back
 rats_complaintsfile <- file.path(data_dir,"2020-Rodent_Complaints.csv")
