@@ -1,14 +1,15 @@
 ## rats-vs-garbage.R
-# Last modified: 2023-04-18 18:35
+# Last modified: 2023-04-20 18:05
 ## A map of DSNY garbage tonnage vs rat complaints
 library(sf)
 library(ggplot2)
 library(data.table)
 data.table::setDTthreads(3)
 
-local_data_dir <- file.path(Sys.getenv('HOME'),"DOHMH-local/rats-by-NTA_data") ## This is where I store my large data files on my local system
-data_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/data") ## This is the data directory of small data in git repo
-code_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/older-stuff")
+## This is where I store my large data files on my local system:
+local_data_dir <- file.path(Sys.getenv('HOME'),"DOHMH-local/rats-by-NTA_data")
+## This is the data directory of small data in git repo:
+data_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/data")
 #
 #
 #
@@ -16,7 +17,8 @@ code_dir <- file.path(Sys.getenv('HOME'),"git-local-repos/torreyma/NYCrats/older
 #### First section: Set up DSNY district geography ############################
 
 DSNY_shape_file  <- "geo_export_002fcdb0-2abc-4a56-89f1-f7b0e7e8baea.shp" 
-DSNY_path <- file.path(data_dir,"DSNY-Districts")
+## Path to DSNY data within the data_dir:
+DSNY_path <- file.path(data_dir,"DSNY")
 DSNY_shape.sf <- st_read(file.path(DSNY_path,DSNY_shape_file), stringsAsFactors = FALSE) ## With path set correctly, load DSNY districts as an st object
 
 
@@ -28,13 +30,17 @@ DSNY_Monthly_Tonnage.dt <- fread(allyears_DSNY_file)
 DSNY_Monthly_2020.dt <- DSNY_Monthly_Tonnage.dt[DSNY_Monthly_Tonnage.dt$MONTH %like% "2020", ] 
 rm(DSNY_Monthly_Tonnage.dt) ## Delete object we aren't using anymore
 invisible(gc()) ## flush memory
-fwrite(DSNY_Monthly_2020.dt, file = file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
+fwrite(DSNY_Monthly_2020.dt, file = file.path(DSNY_path,"2020-DSNY_Monthly_Tonnage.csv"))
 rm(DSNY_Monthly_2020.dt) ## Delete dt we don't need anymore.
 invisible(gc()) ## flush memory
 
 
 ## Read this back in, so we can run this section without above section if necessary:
-DSNY_Monthly_2020.dt <- fread(file.path(data_dir,"2020-DSNY_Monthly_Tonnage.csv"))
+DSNY_Monthly_2020.dt <- fread(file.path(DSNY_path,"2020-DSNY_Monthly_Tonnage.csv"))
+## Drop rows that are NA in BOROUGH_ID
+## -- these are "Queens 7A" community districts. I don't know what those are, but since the data for them is all NA, I feel like I can just drop them.
+## -- (Should eventually look up what Queens 7A is)
+DSNY_Monthly_2020.dt <- data.table::na.omit(DSNY_Monthly_2020.dt, cols="BOROUGH_ID")
 ## Convert BOROUGH_ID to character to match COMMUNITYDISCTRICT
 DSNY_Monthly_2020.dt[, BOROUGH_ID := as.character(BOROUGH_ID)]
 ## Concatenate the two together to get DISTRICTCO (district code)
@@ -48,10 +54,16 @@ DSNY_Annual_2020.dt <- DSNY_Monthly_2020.dt[, lapply(.SD, sum, na.rm=TRUE), by =
 	## plyry way -- working:
 	## library(plyr) 
 	## DSNY_annual_maybe <- ddply(DSNY_Monthly_2020.dt, "BOROUGH", numcolwise(sum, na.rm = TRUE))
-## Still need to figure out what the NA7 district is
-## Also compare the ddply and data table to see if you are getting the same results
-## Then, you can probably do some kind of merge, like this:
-## MFI_by_NTA <- merge(NYC_NTA_shape, MFI_NTA_2021.dt, by.x="NTACode", by.y="NTA_10")
+## (You should compare the ddply and data table to see if you are getting the same results, for a sanity check)
+rm(DSNY_Monthly_2020.dt)
+## Merge shape file and annual collection data by district into one shape object:
+DSNY_Annual_2020_shape.sf <- merge(DSNY_shape.sf, DSNY_Annual_2020.dt, by.x="districtco", by.y="DISTRICTCO")
+rm(DSNY_Annual_2020.dt)
+rm(DSNY_shape.sf)
+invisible(gc())
+## Write out object to shapefile:
+## (Note: this warns that it trims the column names down for .shp files... a lot)
+sf::st_write(DSNY_Annual_2020_shape.sf, file.path(DSNY_path, "DSNY_Annual_2020_shape.shp"))
 
 ##############################################################################
 #
@@ -85,7 +97,7 @@ rm(ratpoints_ractivity.dt)
 invisible(gc()) ## flush memory
 
 
-## Read in rat data csv as spatial -- big file, takes a long time to read, even after the R prompt comes back
+## Read in rat data csv as spatial
 rats_complaintsfile <- file.path(data_dir,"2020-Rodent_Complaints.csv")
 rats_complaintslayer <- "2020-Rodent_Complaints"
 ratcomplaints.sf <- sf::st_read(rats_complaintsfile, rats_complaintslayer, stringsAsFactors = F, quiet=T, options=c("X_POSSIBLE_NAMES=LONGITUDE","Y_POSSIBLE_NAMES=LATITUDE"), crs = 4979)
@@ -117,16 +129,17 @@ ratactivity.sf <- sf::st_read(rats_activityfile, rats_activitylayer, stringsAsFa
 
 # Trying to plot with ggplot:
 ggplot() + 
-#	scale_color_brewer(type="seq",palette="Oranges") +
-	geom_sf(data = MFI_by_NTA, aes(fill=B19113_001E), show.legend=TRUE, color = NA) +
+##	scale_color_brewer(type="seq",palette="Oranges") +
+	geom_sf(data = DSNY_Annual_2020_shape.sf, aes(fill=REFUSETONSCOLLECTED), show.legend=TRUE, color = NA) +
+	scale_fill_gradient(high = "#132B43", low = "#56B1F7") +
 #	scale_y_continuous(breaks = 34:36) ## but breaks aren't working the way I expect them to
-#	+ geom_sf_label(aes(label=B19113_001E)) ## Display MFI value
+#	+ geom_sf_label(aes(label=district))
 	## plot rat inspection points
 	geom_sf(data = ratcomplaints.sf, size=.01, color="yellow", show.legend=FALSE) +
 	geom_sf(data = ratactivity.sf, size=.01, color="red", show.legend=FALSE)
 ## save plot
 # ggsave("ratpoints.png", width=5, height=5)
-ggsave("rat-complaint-activity.png")
+ggsave("DSNY-vs-rats.png")
 
 
 ##############################################################################
